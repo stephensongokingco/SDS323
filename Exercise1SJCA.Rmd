@@ -2,7 +2,7 @@
 title: "Exercise 1"
 author: "Stephenson Gokingco, Akash Thakkar, Caroline Hao, James Cornejo"
 date: "2/14/2020"
-output: md_document
+output: pdf_document
 params:
   milk: "milk.csv"
   abia: "ABIA.csv"
