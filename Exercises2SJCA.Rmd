@@ -1,0 +1,440 @@
+---
+title: "Exercises 2"
+author: "Stephenson Gokingco, Akash Thakkar, Caroline Hao, James Cornejo"
+date: "3/13/2020"
+output: pdf_document
+params:
+  sclass: "sclass.csv"
+  online_news: "online_news.csv"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(mosaic)
+library(ggplot2)
+library(dplyr)
+library(tidyverse)
+library(foreach)
+library(FNN)
+library(zoom)
+sclass <- read.csv(params$sclass)
+```
+
+<header>
+
+<center>
+
+1) KNN practice
+===================================================================
+
+</header>
+</center>
+
+The data in sclass.csv contains data on over 29,000 Mercedes S Class vehicles---essentially every such car in this class that was advertised on the secondary automobile market during 2014. For websites like Cars.com or Truecar that aim to provide market-based pricing information to consumers, the Mercedes S class is a notoriously difficult case. There is a huge range of sub-models that are all labeled "S Class,"" from large luxury sedans to high-performance sports cars. Moreover, individual submodels involve cars with many different features. This extreme diversity---unusual for a single model of car---makes it difficult to provide accurate pricing predictions to consumers.
+
+For this report, we will be focusing on three variables in particular: trim (categorical variable for car's trim level, e.g. 350, 63 AMG, etc. The trim is like a sub-model designation.), mileage (mileage on the car), and price (the sales price in dollars of the car).
+
+We will use K-nearest neighbors to build a predictive model for price, given mileage, separately for each of two trim levels: 350 and 65 AMG. That is, we'll be treating the 350's and the 65 AMG's as two separate data sets.
+
+First, let's split the 350 and 65 AMG's into two separate datasets:
+
+```{r}
+sclass350 = subset(sclass, trim == '350')
+sclass65AMG = subset(sclass, trim == '65 AMG')
+```
+
+Next, let's just take a look at the price vs. mileage for each trim level. This will give us a better picture of the high-level differences between the two datasets.
+
+```{r echo = FALSE}
+plot(price ~ mileage, data = sclass350, main = "350 trim price vs. mileage", xlab="Mileage", ylab="Price")
+```
+
+```{r echo = FALSE}
+plot(price ~ mileage, data = sclass65AMG, main = "65 AMG trim price vs. mileage", xlab="Mileage", ylab="Price")
+```
+
+Let's start the actual KNN. First, we will be splitting the data into a training and testing set for each of the two trim levels. We'll start with the 350.
+
+```{r}
+# Train-test split
+N = nrow(sclass350)
+N_train = floor(0.8*N)
+N_test = N - N_train
+# Randomly sample a set of data points to include in the training set
+train_ind = sample.int(N, N_train, replace=FALSE)
+# Define the training and testing set
+D_train = sclass350[train_ind,]
+D_test = sclass350[-train_ind,]
+# Now, separate the training and testing sets into features (X) and outcome (y)
+X_train = select(D_train, mileage)
+y_train = select(D_train, price)
+X_test = select(D_test, mileage)
+y_test = select(D_test, price)
+```
+
+We then run K-nearest-neighbors for many different values of K, starting at K=2 and going as high as we need to. For each value of K, we fit the model to the training set and make predictions on our test set. We calculate the out-of-sample root mean-squared error (RMSE) for each value of K and made a plot of RMSE vs. K. 
+
+```{r echo = FALSE}
+# Helper function for calculating RMSE
+rmse = function(y, ypred) {
+  sqrt(mean(data.matrix((y-ypred)^2))) }
+
+# Loop grids of RSME results
+k_grid = seq(3, 150, by=2)
+# CHANGE THE DOS TO 200 LATER!
+err_grid = foreach(k = k_grid,  .combine='c') %do% {
+  out = do(200)*{
+    # randomly sample a set of data points to include in the training set
+    train_ind = sample.int(N, N_train, replace=FALSE)
+    
+    # Define the training and testing set
+    D_train = sclass350[train_ind,]
+    D_test = sclass350[-train_ind,]
+    
+    # Now separate the training and testing sets into features (X) and outcome (y)
+    X_train = select(D_train, mileage)
+    y_train = select(D_train, price)
+    X_test = select(D_test, mileage)
+    y_test = select(D_test, price)
+    
+    # Fit KNN models (notice the odd values of K)
+    knn_try = knn.reg(train=X_train, test= X_test, y=y_train, k=k)
+    
+    # Calculating classification errors
+    ypred_knn_try = knn_try$pred
+    rmse(y_test, ypred_knn_try)
+  } 
+  mean(out$result)
+}
+
+plot(k_grid, err_grid, main="RMSE vs. K", xlab="K", ylab="RMSE")
+```
+
+Based on the RMSE vs. K plot, it seems that the optimal value of K is 15. Let's show a plot of the fitted model using K = 15.
+
+```{r echo = FALSE}
+knn_test = knn.reg(train = X_train, test = X_test, y = y_train, k=15)
+ypred_knn_test = knn_test$pred
+D_test$ypred_knn_test = ypred_knn_test
+p_test = ggplot(data = D_test) + 
+  geom_point(mapping = aes(x = mileage, y = price), color='lightgrey') + 
+  theme_bw(base_size=18) + 
+  ylim(500, 125000) + 
+    labs(title="Plot of Fitted Model for 350 Trim K = 15",
+         x="Mileage",
+         y="Price")
+
+p_test + geom_point(aes(x = mileage, y = price), color='red') + 
+  geom_point(aes(x = mileage, y = ypred_knn_test), color='blue')
+```
+
+Following a very similar procedure with the 65 AMG trim, we get the following RMSE vs. K plot:
+
+```{r echo = FALSE}
+#####
+# Train/test split 2
+#####
+# Trim 65
+# Make a train-test split
+N2 = nrow(sclass65AMG)
+N2_train = floor(0.8*N2)
+N2_test = N2 - N2_train
+
+# randomly sample a set of data points to include in the training set
+train2_ind = sample.int(N2, N2_train, replace=FALSE)
+
+# Define the training and testing set
+D2_train = sclass65AMG[train2_ind,]
+D2_test = sclass65AMG[-train2_ind,]
+
+# Now separate the training and testing sets into features (X) and outcome (y)
+X2_train = select(D2_train, mileage)
+y2_train = select(D2_train, price)
+X2_test = select(D2_test, mileage)
+y2_test = select(D2_test, price)
+
+# Loop grids of RSME results
+k2_grid = seq(3, 150, by=2)
+# CHANGE THE DOS TO 200 LATER!
+err2_grid = foreach(k = k2_grid,  .combine='c') %do% {
+  out = do(200)*{
+    # randomly sample a set of data points to include in the training set
+    train2_ind = sample.int(N2, N2_train, replace=FALSE)
+    
+    # Define the training and testing set
+    D2_train = sclass65AMG[train2_ind,]
+    D2_test = sclass65AMG[-train2_ind,]
+    
+    # Now separate the training and testing sets into features (X) and outcome (y)
+    X2_train = select(D2_train, mileage)
+    y2_train = select(D2_train, price)
+    X2_test = select(D2_test, mileage)
+    y2_test = select(D2_test, price)
+    
+    # Fit KNN models (notice the odd values of K)
+    knn2_try = knn.reg(train=X2_train, test= X2_test, y=y2_train, k=k)
+    
+    # Calculating classification errors
+    y2pred_knn_try = knn2_try$pred
+    rmse(y2_test, y2pred_knn_try)
+  } 
+  mean(out$result)
+}
+
+plot(k2_grid, err2_grid, main="RMSE vs. K", xlab="K", ylab="RMSE")
+```
+
+For the 65 AMG trim, the optimal value of K is 19. Let's see what the plot of the fitted model looks like for K = 19.
+
+```{r echo = FALSE}
+knn2_test = knn.reg(train = X2_train, test = X2_test, y = y2_train, k=150)
+
+y2pred_knn_test = knn2_test$pred
+
+D2_test$y2pred_knn_test = y2pred_knn_test
+p2_test = ggplot(data = D2_test) + 
+  geom_point(mapping = aes(x = mileage, y = price), color='lightgrey') + 
+  theme_bw(base_size=18) + 
+  ylim(100, 300000) + 
+    labs(title="Plot of Fitted Model for 65 AMG Trim K = 19",
+         x="Mileage",
+         y="Price")
+
+p2_test + geom_point(aes(x = mileage, y = price), color='red') + 
+  geom_point(aes(x = mileage, y = y2pred_knn_test), color='blue')
+```
+
+Based on our findings, it seems that the 65 AMG trim yields a slightly larger optimal value of K than the 350 trim (K = 19 > K = 15). If we take a look at the first scatterplots of price vs. mileage for both trim levels, we can see that for the 350 trim, there's areas of high-density, low variation in terms of where the points are located. For the 65 AMG trim, we don't see much density of points. In other words, the 65 AMG plot "needs" the higher K to account for the higher variation of values and minimize RMSE.
+
+
+2) Predicting House Prices in Saratoga, New York
+===================================================================
+
+</header>
+</center>
+
+Using data on the prices and characteristics of houses in Saratoga, New York, we seek to create a predictive model of house prices in the city. It is imporant to note that in our model, we will be excluding land value (which is an observed house characteristic in the data). This is because land value likely would bring endogenieity issues in the model. 
+
+For example, suppose there is an area with expensive houses and an area with non-expensive houses. The area with expensive houses would generate greater property tax revenue. Tax revenue from property taxes help fund public amenities and services such as schools and education. Thus, schools in the expensive housing area would likely receive more funding than schools in the non-expensive housing area. Since school funding is likely a strong positive correlate with school quality, the schools in the expensive housing areas will likely be better. Having better schools in an area would then likely increase the land value in that area. Hence, to avoid these issues of endogeneity, we will not include land value as a variable in our model. Asides from land value, the rest of the house characteristic variables will be included in the model.
+
+To begin creating the model, we will clear the working environment and load the SaratogaHouse data and the needed libraries. We will also generate or recode dummy variables for the existing categorical variables in the data.
+```{r include=FALSE}
+##############################################################################
+# Setting Up Workspace
+##############################################################################    
+    rm(list=ls())
+    
+    library(mosaic)
+    library(foreach)
+    library(FNN)
+    library(tidyverse)
+    library(zoom)
+    library(doMC)
+    library(class)
+    library(Jmisc)
+    
+    data(SaratogaHouses)
+    
+# We will begin by creating new dummy variables for the categorical variables in the data
+    SaratogaHouses$fuel_electric=as.numeric(SaratogaHouses$fuel=="electric")
+    SaratogaHouses$fuel_gas=as.numeric(SaratogaHouses$fuel=="gas")
+    SaratogaHouses$fuel_oil=as.numeric(SaratogaHouses$fuel=="oil")
+    
+    SaratogaHouses$heating_steam=as.numeric(SaratogaHouses$heating=="hot water/steam")
+    SaratogaHouses$heating_electric=as.numeric(SaratogaHouses$heating=="electric")
+    SaratogaHouses$heating_hotair=as.numeric(SaratogaHouses$heating=="hot air")
+    
+    SaratogaHouses$sewer_none=as.numeric(SaratogaHouses$sewer=="none")
+    SaratogaHouses$sewer_septic=as.numeric(SaratogaHouses$sewer=="septic")
+    SaratogaHouses$sewer_pubcom=as.numeric(SaratogaHouses$sewer=="public/commercial")
+    
+    #note, 1=yes
+    SaratogaHouses$waterfront = abs(as.numeric(SaratogaHouses$waterfront)-2)
+    SaratogaHouses$centralAir = abs(as.numeric(SaratogaHouses$centralAir)-2)
+    SaratogaHouses$newConstruction = abs(as.numeric(SaratogaHouses$newConstruction)-2)
+```
+
+
+To determine the exact model specifications, we will use forward and step-wise selection. We will use the higher performing of the both selection methods. To begin the step-wise selection process, we need to start with a base model. We will use the following:
+```{r eval = FALSE}
+lm_medium = lm(price ~ lotSize + age + livingArea + pctCollege + bedrooms + 
+               fireplaces + bathrooms + rooms + heating_hotair + heating_steam + fuel_oil + fuel_gas + 
+                 centralAir, data=SaratogaHouses)
+                     
+```
+
+The step-wise and forward selection models both will likely include unintuitive interactions among the house characteristic variables. However, because our objective is model improvement from this baseline, we are willing to sacrifice interpretability to improve performance. To test if the selection models do make improvements from the base model and to determine which selection model is better, we will split the data into a training and test set. After fitting the three models (baseline, forward selection, and step-wise selection) to the training data, we will predict the testing data and calculate the out-of-sample root mean squared error (RMSE). To reduce the effect of the random sampling, we will iterate this process 250 times. 
+
+```{r include = FALSE}
+##################################################################################################
+# Linear Model
+##################################################################################################
+
+# We will start with the baseline medium model with 11 main effects from class. Note, for heating and fuel, we will exclude the heating_electric and fuel_electric dummy variables to avoid perfect colinearity in the model. Thus, the coefficients for heating_hotair and heating_steam should be interpreted in relation to heating_electric. Similarly, the coefficients for fuel_oil and fuel_gas should be interpreted in relation to fuel_electric.
+
+    lm_medium = lm(price ~ lotSize + age + livingArea + pctCollege + bedrooms + 
+                     fireplaces + bathrooms + rooms + heating_hotair + heating_steam + fuel_oil + 
+                     fuel_gas + centralAir, data=SaratogaHouses)
+
+# Let us create a forward selected model starting with the intercept alone
+    lm0 = lm(price ~ 1, data=SaratogaHouses)
+    lm_forward = step(lm0, direction='forward',
+                      scope=~(lotSize + age + livingArea + pctCollege + bedrooms + 
+                                fireplaces + bathrooms + rooms + heating_hotair + heating_steam + 
+                                fuel_oil + fuel_gas + centralAir + sewer_septic + sewer_pubcom + 
+                                newConstruction + waterfront)^2)
+
+# Let us now create a stepwise selected model starting with the medium model
+    lm_step = step(lm_medium, 
+                   scope=~(. + sewer_septic + sewer_pubcom + newConstruction + waterfront)^3)
+
+# Let us define a helper function rmse that returns the root mean squared error for the models
+    rmse = function(y, yhat) {
+      sqrt( mean( (y - yhat)^2 ) )
+    }
+
+# Let us now split the data into training and testing sets
+    n = nrow(SaratogaHouses)
+    n_train = round(0.8*n)  # this is rounded to the nearest integer
+    n_test = n - n_train
+    
+    rmse_vals = do(100)*{
+      # Let us split the data into train and test cases with the same sample sizes
+        train_cases = sample.int(n, n_train, replace=FALSE)
+        test_cases = setdiff(1:n, train_cases)
+        saratoga_train = SaratogaHouses[train_cases,]
+        saratoga_test = SaratogaHouses[test_cases,]
+      
+      # Let us now fit to the training data
+        # use `update` to refit the same model with a different set of data
+        lm1 = update(lm_medium, data=saratoga_train)
+        lm2 = update(lm_forward, data=saratoga_train)
+        lm3 = update(lm_step, data=saratoga_train)
+      
+      # Let us store the predictions out of sample
+        yhat_test1 = predict(lm1, saratoga_test)
+        yhat_test2 = predict(lm2, saratoga_test)
+        yhat_test3 = predict(lm3, saratoga_test)
+      
+        c(rmse(saratoga_test$price, yhat_test1),
+          rmse(saratoga_test$price, yhat_test2),
+          rmse(saratoga_test$price, yhat_test3))
+    }
+```
+
+The below table averages the RMSE values for each model for the 250 iterations. Note, V1 refers to the base model from above, V2 refers to the forward selection model, and V3 refers to the step-wise selection model. From the table, we conclude that the step-wise selection model is the highest performing of the three options.
+```{r echo=FALSE}
+# Let us view the average RMSE values for the three models. Notice that the stepwise selected model improves greatly from the medium model in class
+    colMeans(rmse_vals)
+```
+
+The following shows the different combinations of feature variables used in the step-wise model, as well as their regression coefficients. As stated above, this model is not intuitively interpretable. However, our primary objective is prediction and thus we are willing to sacrifice readability for model improvement. For example, the largest regression coeffient is for the waterfront indicator variable and the largest interaction regression coefficient is for the lotsize and waterfront interaction. However, this is difficult to interpret because the interaction variable more than offsets the positive effect of being a waterfront property.
+```{r echo=FALSE}
+# Let us see what the step model specifications are
+    getCall(lm_step)
+    coef(lm_step)
+```
+
+
+
+We will now consider using a K-nearest-neighbors model to see if it can further improve our prediction performance. To motivate our choice in K, we will loop over different K values to see what range of K values have the lowest average RMSE values for 250 iterations of training and testing splits. We will first plot the scatter plot of these averages and then plot a line of best fit of an eighth degree polynomial function. The purpose of this high degree polynomial function is to flexibly show the general relationship between the average RMSE and the K values. 
+```{r include=FALSE}
+##################################################################################################
+# KNN Model
+##################################################################################################
+# Let us begin by creating a dataframe of the base feature variables we used in the step model to predict housing prices. Note that we are not including interactions.
+    X = dplyr::select(SaratogaHouses, lotSize, age, livingArea, pctCollege, 
+                      bedrooms, fireplaces, bathrooms, rooms, heating_hotair, heating_steam, fuel_oil, fuel_gas, 
+                      centralAir, waterfront, newConstruction) 
+    
+# Let us create a vector of price that we want to predict
+    y = SaratogaHouses$price
+
+# Let us split the data into a testing and training set
+    n = nrow(SaratogaHouses)
+    n_train = round(0.8*n)  # round to nearest integer
+    n_test = n - n_train
+    
+  # We will randomly sample a set of data points to include in the training set
+    train_ind = sample.int(n, n_train)
+
+# Let us definte the training and testing sets
+    X_train = X[train_ind,]
+    X_test = X[-train_ind,]
+    y_train = y[train_ind]
+    y_test = y[-train_ind]
+
+# Let us scale the training set features by their standard deviations
+    scale_factors = apply(X_train, 2, sd)
+    X_train_sc = scale(X_train, scale=scale_factors)
+
+# Let us scale the test set features using the same scale factors as above
+    X_test_sc = scale(X_test, scale=scale_factors)
+
+# Let us define a helper function for calculating RMSE
+    rmse = function(y, ypred) {
+      sqrt(mean(data.matrix((y-ypred)^2))) }
+
+# Let us put the training data in a single data frame
+    knn_trainset = data.frame(X_train_sc, type = y_train)
+
+# We will now loop grids of RSME results by different values of K
+    k_grid = seq(3, 201, by=2)
+    err_grid = foreach(k = k_grid,  .combine='c') %do% {
+      out = do(250)*{
+        # randomly sample a set of data points to include in the training set
+        train_ind = sample.int(n, n_train, replace=FALSE)
+        
+        # define the training and testing set
+        X_train = X[train_ind,]
+        X_test = X[-train_ind,]
+        y_train = y[train_ind]
+        y_test = y[-train_ind]
+        
+        # fit KNN models (notice the odd values of K)
+        knn_try = knn.reg(train=X_train, test= X_test, y=y_train, k=k)
+        
+        # calculating classification errors
+        ypred_knn_try = knn_try$pred
+        rmse(y_test, ypred_knn_try)
+      } 
+      mean(out$result)
+    }
+```
+
+```{r echo = FALSE}
+# Let us plot the results of the loop above as a scatter plot and as a 8th degree polynomial function
+    # The polynomial will help us identify the general trend in the relationship between K and RMSE. Based on the results, K=25 seems to be good K value on average.
+    
+    errgridplot <- plot(k_grid, err_grid, main ="Average RMSE by K value", sub = "Averaged over 250 Train-Test Splits", xlab = "K value", ylab = "Average RMSE")
+    
+    poly8  <- lm(err_grid~k_grid+I(k_grid^2)+I(k_grid^3)+I(k_grid^4)+I(k_grid^5)+I(k_grid^6)+I(k_grid^7)+I(k_grid^8))
+    poly8plot <- plot(k_grid, fitted(poly8), type="l", main = "Fitted Average RMSE by K value", sub = "Averaged over 250 Train-Test Splits", xlab = "K value", ylab = "Average RMSE")
+
+    # Use the function below to zoom into the plot to more clearly identify trends.
+      #zm()
+```
+Based on the figures above, K=21 is a reasonable choice that has a low RMSE. Following this, we will compare the average RMSE value based on the 250 iteractions with the RMSE values presented previously. The below table shows these averages. Based on the table, the KNN model performs worse than the three prior models.
+``` {r include = FALSE}
+# Based on the loop above, we have concluded that k*=21 is a reasonable value to minimize error. Note, k*=21 is odd so that there are no tie cases.
+    #Note, we started at k=3 and k is 2i+3 for i in [0, 199] in the outter loop. Thus, k* is entry 1+(21+3)/2 = 1+9=10 in the k_grid vector that corresponds to k*
+        #Hence, k_grid[10] corresponds to k*=21.
+    #Note, k* corresponds to index i-3 in the err_grid because we started at k=3. 
+        #Hence, err_grid[18] corresponds to k*=21.
+    err_grid[18]
+    err_grid[37]
+    k_grid[10]
+    err_grid
+    k_grid
+  
+# Let us recall the RMSE values from the medium model and step model
+    rmsevalavg<-colMeans(rmse_vals)
+
+    rmsemeans=c("median model"=rmsevalavg[1], "forward model"=rmsevalavg[2], "step model"=rmsevalavg[3], "knn21 model.V4"=err_grid[18])
+```
+
+```{r echo=FALSE}
+    print(rmsemeans)
+```
+
+Based on our analysis, we conclude that the step-wise selected model is the best approach to predicting house prices. It improved upon the baseline model and outperformed the forward selection model. The K nearest neighbors model with a K value of 21 performed worse than the baseline model as well as the selection-based models. It is important to note that the selection models do suffer from low interpretability. However, they significantly improve model performance. In the context of forming predicted market values for properties and calculating their respective property tax liabilities, model performance is of highest importance.
