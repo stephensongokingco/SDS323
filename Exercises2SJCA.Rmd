@@ -110,7 +110,7 @@ err_grid = foreach(k = k_grid,  .combine='c') %do% {
 plot(k_grid, err_grid, main="RMSE vs. K", xlab="K", ylab="RMSE")
 ```
 
-Based on the RMSE vs. K plot, it seems that the optimal value of K is 15. Let's show a plot of the fitted model using K = 15.
+Based on the RMSE vs. K plot, it seems that the optimal value of K is 15. We determined this using the zoom library where we were able to enhance parts of the plot to find the value of K associated with the minimum value of RMSE. Unfortunately, we couldn't save zoom library plots. Let's show a plot of the fitted model using K = 15.
 
 ```{r echo = FALSE}
 knn_test = knn.reg(train = X_train, test = X_test, y = y_train, k=15)
@@ -184,7 +184,7 @@ err2_grid = foreach(k = k2_grid,  .combine='c') %do% {
 plot(k2_grid, err2_grid, main="RMSE vs. K", xlab="K", ylab="RMSE")
 ```
 
-For the 65 AMG trim, the optimal value of K is 19. Let's see what the plot of the fitted model looks like for K = 19.
+For the 65 AMG trim, the optimal value of K is 19, using a similar procedure with the zoom library. Let's see what the plot of the fitted model looks like for K = 19.
 
 ```{r echo = FALSE}
 knn2_test = knn.reg(train = X2_train, test = X2_test, y = y2_train, k=150)
@@ -213,9 +213,9 @@ Based on our findings, it seems that the 65 AMG trim yields a slightly larger op
 </header>
 </center>
 
-Using data on the prices and characteristics of houses in Saratoga, New York, we seek to create a predictive model of house prices in the city. It is imporant to note that in our model, we will be excluding land value (which is an observed house characteristic in the data). This is because land value likely would bring endogenieity issues in the model. 
+Using data on the prices and characteristics of houses in Saratoga, New York, we seek to create a predictive model of house prices in the city. The goal of this report is to compare model performances of models that outperform the "medium" model we determined in class. By focusing on the relative performances of our price-modeling strategies, we can best help the local taxing authority form predicted market values for taxing purposes. 
 
-For example, suppose there is an area with expensive houses and an area with non-expensive houses. The area with expensive houses would generate greater property tax revenue. Tax revenue from property taxes help fund public amenities and services such as schools and education. Thus, schools in the expensive housing area would likely receive more funding than schools in the non-expensive housing area. Since school funding is likely a strong positive correlate with school quality, the schools in the expensive housing areas will likely be better. Having better schools in an area would then likely increase the land value in that area. Hence, to avoid these issues of endogeneity, we will not include land value as a variable in our model. Asides from land value, the rest of the house characteristic variables will be included in the model.
+It is imporant to note that in our model, we will be excluding land value (which is an observed house characteristic in the data). This is because land value likely would bring endogenieity issues in the model. For example, suppose there is an area with expensive houses and an area with non-expensive houses. The area with expensive houses would generate greater property tax revenue. Tax revenue from property taxes help fund public amenities and services such as schools and education. Thus, schools in the expensive housing area would likely receive more funding than schools in the non-expensive housing area. Since school funding is likely a strong positive correlate with school quality, the schools in the expensive housing areas will likely be better. Having better schools in an area would then likely increase the land value in that area. Hence, to avoid these issues of endogeneity, we will not include land value as a variable in our model. Asides from land value, the rest of the house characteristic variables will be included in the model.
 
 To begin creating the model, we will clear the working environment and load the SaratogaHouse data and the needed libraries. We will also generate or recode dummy variables for the existing categorical variables in the data.
 ```{r include=FALSE}
