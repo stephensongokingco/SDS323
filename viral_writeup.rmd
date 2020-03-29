@@ -1,0 +1,1046 @@
+---
+output: pdf_document
+params:
+  online_news: online_news.csv
+---
+<header>
+
+<center>
+
+Virality of Articles
+=================================
+
+</center>
+
+</header>
+
+
+Mashable is interested in building a model to predict for whether the article goes viral or not.
+The criteria of "virality" depends on the following constraint:
+
+1. Shares of an article is greater than 1400.
+
+They want to understand the variables that can improve an article's chance of reaching this threshold.
+
+## Libraries and Loading Dataset:
+
+For the analysis, we used the 'online_news.csv' file and the tidyverse, gamlr, and dplyr libraries.
+```{r echo = T, results='hide'}
+library(tidyverse)
+library(gamlr)
+library(dplyr)
+news = read.csv(params$online_news)
+news = na.omit(news)
+```
+
+<center>
+For this problem, we built a KNN model with a k value of 3 and the following variables:
+</center>
+
+1. num_keywords
+2. data_channel_is_entertainment
+3. self_reference_avg_sharess
+4. global_rate_positive_words
+5. weekday_is_saturday
+
+For the first iteration, the approach to apply the regression and threshold second was applied. For this
+approach, we also did 100 different iterations and averaged the counts for "viral" and "not viral". 
+
+```{r echo = FALSE}
+library(tidyverse)
+library(ggplot2)
+
+# this is to do the computations to show the table, accuracy later
+
+#select features to include in knn model
+x = dplyr::select(news, num_keywords,data_channel_is_entertainment, self_reference_avg_sharess, global_rate_positive_words, weekday_is_saturday)
+y = news$shares
+n = length(y)
+
+#train/test split
+n_train = round(0.8*n)
+n_test = n - n_train
+
+TP = 0
+TN = 0
+FP = 0
+FN = 0
+
+TP_null = 0
+TN_null = 0
+FP_null = 0
+FN_null = 0
+
+# knn_a_v = 0
+# knn_p_v = 0
+# knn_a_nv = 0
+# knn_p_nv = 0
+
+N = 100
+
+for (i in 1:N){
+  #split up training/testing data w/ random sampling
+  train_ind = sample.int(n, n_train)
+  x_train = x[train_ind,]
+  x_test = x[-train_ind,]
+  y_train = y[train_ind]
+  y_test = y[-train_ind]
+  
+  #scale training feature set column-wise by standard deviation
+  sd_scale = apply(x_train, 2, sd)
+  
+  #scale each x
+  x_train_sc = scale(x_train, scale=sd_scale)
+  x_test_sc = scale(x_test, scale=sd_scale)
+  
+  #make knn model
+  knn61 = class::knn(train=x_train_sc, test=x_test_sc, cl=y_train, k=99)
+  #knn25 = class::knn(train=x_train_sc, test=x_test_sc, cl=y_train, k=25)
+  
+  #output knnmodel into data set
+  knn_trainset = data.frame(x_train, type = y_train)
+  knn61_ts = data.frame(x_test, type = y_test, type_pred = knn61)
+  #knn25_ts = data.frame(x_test, type = y_test, type_pred = knn25)
+  
+  knn61_actual <- ifelse(knn61_ts["type"] > 1400,"viral","not viral")
+  knn61_pred <- ifelse(as.numeric(as.character(knn61)) > 1400,"viral","not viral")
+  
+  # knn_a_v = knn_a_v + sum(knn61_actual == "viral")
+  # knn_p_v = knn_p_v + sum(knn61_pred == "viral")
+  # knn_a_nv = knn_a_nv + sum(knn61_actual == "not viral")
+  # knn_p_nv = knn_p_nv + sum(knn61_pred == "not viral")
+  # 
+  TP = TP + sum(knn61_actual == "viral" & knn61_pred == "viral")
+  TN = TN + sum(knn61_actual == "not viral" & knn61_pred == "not viral")
+  FP = FP + sum(knn61_actual == "not viral" & knn61_pred == "viral")
+  FN = FN + sum(knn61_actual == "viral" & knn61_pred == "not viral")
+  
+  #This is the null model
+  knn_null = as.list(rep("not viral", n_test))
+  
+  TP_null = TP_null + sum(knn61_actual == "viral" & knn_null == "viral")
+  TN_null = TN_null + sum(knn61_actual == "not viral" & knn_null == "not viral")
+  FP_null = FP_null + sum(knn61_actual == "not viral" & knn_null == "viral")
+  FN_null = FN_null + sum(knn61_actual == "viral" & knn_null == "not viral")
+  
+}
+
+TP = floor(TP/N)
+TN = floor(TN/N)
+FP = floor(FP/N)
+FN = floor(FN/N)
+
+TP_null = floor(TP_null/N)
+TN_null = floor(TN_null/N)
+FP_null = floor(FP_null/N)
+FN_null = floor(FN_null/N)
+
+# knn_a_v = floor(knn_a_v/N)
+# knn_p_v = floor(knn_p_v/N)
+# knn_a_nv = floor(knn_a_nv/N)
+# knn_p_nv = floor(knn_p_nv/N)
+
+c_data <- matrix(c(TN,FP,FN,TP),ncol=2,byrow=TRUE)
+colnames(c_data) <- c("Predicted: Not Viral", "Predicted: Viral")
+rownames(c_data) <- c("Actual: Not Viral", "Actual: Viral")
+
+#knn61_table = table(knn61_actual)
+
+confusionMatrix <- as.table(c_data)
+accuracy = (TP+TN)/n_test * 100
+true_pos = TP/(TP+FN)
+false_pos = FP/(FP+TN)
+
+c_data_null <- matrix(c(TN_null,FP_null,FN_null,TP_null),ncol=2,byrow=TRUE)
+colnames(c_data_null) <- c("Predicted: Not Viral", "Predicted: Viral")
+rownames(c_data_null) <- c("Actual: Not Viral", "Actual: Viral")
+
+confusionMatrix_null <- as.table(c_data_null)
+accuracy_null = (TP_null+TN_null)/n_test * 100
+#true_pos_null = TP_null/knn61_table[2]
+#false_pos_null = FP_null/knn61_table[1]
+```
+<center>
+Results:
+============
+</center>
+
+
+### Approach 1: Regression then Thresholding | K = 99
+
+After running the knn model with different train/test splits for 100 iterations. We averaged over the counts
+of "viral" and "not viral". With using the parameters stated above, we were able to get an accuracy for this approach ranging from 48% - 53%. 
+
+Below, it shows the table for the confusion matrix, accuracy, true positive rate, and false positive rate.
+
+#### Confusion Matrix:
+```{r echo = FALSE}
+confusionMatrix
+```
+#### Accuracy: 
+```{r echo = FALSE}
+accuracy
+```
+#### True Positive Rate:
+```{r echo = FALSE}
+true_pos
+```
+#### False Positive Rate:
+```{r echo = FALSE}
+false_pos
+```
+
+The Null Model tended to do worse than the KNN model, and ranged in accuracy of 40% - 46%.
+
+### Null Model
+```{r echo = FALSE}
+confusionMatrix_null
+```
+
+#### Accuracy: Null Model
+```{r echo = FALSE}
+accuracy_null
+```
+
+### Approach 2: Thresholding then Regression | K = 99
+
+With this approach, we created a column variable 'viral' which converts the 'shares' column of 'online_news.csv' to 1 or 0. This
+conversion will be based on the case if the number of 'shares' is greater than 1400. Before we do any regression and make any knn models,
+we simplify the shares from numbers ranging in the thousands to a binary value. 
+
+This type of binary model did better than the first approach. There was an average increase of accuracy percentage by around 5-7%. We believe this was the case because it simplifies the guess that the model has to make. Instead of trying to guess a certain number of shares based on the training data, the model can choose 1 or 0. This simpler model provides a better accuracy in both the KNN3 model and the Null Model when compared to Approach 1.
+
+Below, it shows the table for the confusion matrix, accuracy, true positive rate, and false positive rate.
+```{r echo = FALSE}
+library(tidyverse)
+library(ggplot2)
+
+#create viral var
+viral = ifelse(news["shares"] >= 1400,1,0)
+
+#select features to include in knn model
+x = dplyr::select(news, num_keywords,data_channel_is_entertainment, self_reference_avg_sharess, global_rate_positive_words, weekday_is_saturday)
+y = viral
+n = length(y)
+
+#train/test split
+n_train = round(0.8*n)
+n_test = n - n_train
+
+TP = 0
+TN = 0
+FP = 0
+FN = 0
+
+TP_null = 0
+TN_null = 0
+FP_null = 0
+FN_null = 0
+
+N = 100
+for (i in 1:N){
+  
+  #split up training/testing data w/ random sampling
+  train_ind = sample.int(n, n_train)
+  x_train = x[train_ind,]
+  x_test = x[-train_ind,]
+  y_train = y[train_ind]
+  y_test = y[-train_ind]
+  
+  #scale training feature set column-wise by standard deviation
+  sd_scale = apply(x_train, 2, sd)
+  
+  #scale each x
+  x_train_sc = scale(x_train, scale=sd_scale)
+  x_test_sc = scale(x_test, scale=sd_scale)
+  
+  #make knn model
+  knn61 = class::knn(train=x_train_sc, test=x_test_sc, cl=y_train, k=99)
+  #knn25 = class::knn(train=x_train_sc, test=x_test_sc, cl=y_train, k=25)
+  
+  #output knnmodel into data set
+  knn_trainset = data.frame(x_train, type = y_train)
+  knn61_ts = data.frame(x_test, type = y_test, type_pred = knn61)
+  #knn25_ts = data.frame(x_test, type = y_test, type_pred = knn25)
+  
+  knn61_actual <- ifelse(knn61_ts["type"] == 1,1,0)
+  knn61_pred <- ifelse(as.numeric(as.character(knn61)) == 1,1,0)
+  
+  TP = TP + sum(knn61_actual == 1 & knn61_pred == 1)
+  TN = TN + sum(knn61_actual == 0 & knn61_pred == 0)
+  FP = FP + sum(knn61_actual == 0 & knn61_pred == 1)
+  FN = FN + sum(knn61_actual == 1 & knn61_pred == 0)
+  
+  #This is the null model
+  knn_null = as.list(rep(0, n_test))
+  
+  TP_null = TP_null + sum(knn61_actual == 1 & knn_null == 1)
+  TN_null = TN_null + sum(knn61_actual == 0 & knn_null == 0)
+  FP_null = FP_null + sum(knn61_actual == 0 & knn_null == 1)
+  FN_null = FN_null + sum(knn61_actual == 1 & knn_null == 0)
+}
+
+TP = floor(TP/N)
+TN = floor(TN/N)
+FP = floor(FP/N)
+FN = floor(FN/N)
+
+TP_null = floor(TP_null/N)
+TN_null = floor(TN_null/N)
+FP_null = floor(FP_null/N)
+FN_null = floor(FN_null/N)
+
+c_data <- matrix(c(TN,FP,FN,TP),ncol=2,byrow=TRUE)
+colnames(c_data) <- c("Predicted: Not Viral", "Predicted: Viral")
+rownames(c_data) <- c("Actual: Not Viral", "Actual: Viral")
+
+#knn61_table = table(knn61_actual)
+
+confusionMatrix <- as.table(c_data)
+accuracy = (TP+TN)/n_test * 100
+true_pos = TP/(TP+FN)
+false_pos = FP/(FP+TN)
+
+c_data_null <- matrix(c(TN_null,FP_null,FN_null,TP_null),ncol=2,byrow=TRUE)
+colnames(c_data_null) <- c("Predicted: Not Viral", "Predicted: Viral")
+rownames(c_data_null) <- c("Actual: Not Viral", "Actual: Viral")
+
+confusionMatrix_null <- as.table(c_data_null)
+accuracy_null = (TP_null+TN_null)/n_test * 100
+# true_pos_null = TP_null/knn61_table[2]
+# false_pos_null = FP_null/knn61_table[1]
+# 
+# #Output Confusion Matrix, accuracy, true_pos, false_pos
+# confusionMatrix
+# accuracy
+# true_pos
+# false_pos
+# 
+# #Output Null
+# confusionMatrix_null
+# accuracy_null
+# #true_pos_null
+# #false_pos_null
+```
+
+We can see below that this model was overall a better predictor to whether or not an article would become viral.
+
+#### Confusion Matrix
+
+```{r echo = FALSE}
+confusionMatrix
+```
+
+#### Accuracy:
+
+```{r echo = FALSE}
+accuracy
+```
+
+#### True Positive Rate:
+
+```{r echo = FALSE}
+true_pos
+```
+
+#### False Positive Rate:
+
+```{r echo = FALSE}
+false_pos
+```
+
+The Null Model tended to do worse than the KNN model, and ranged in accuracy of 40% - 43%.
+
+### Null Model
+```{r echo = FALSE}
+confusionMatrix_null
+```
+
+#### Accuracy: Null Model
+```{r echo = FALSE}
+accuracy_null
+```
+
+### Using Step-Wise Selection for Feature Selection
+
+For this iteration of Approach 2, in order to find the best feature selection, I implemented the step-wise selection to find the best possible combination for these variables:
+
+We chose 11 random variables to create the first baseline model.
+```{r}
+# going to try and find best variables for linear model and implement those into the knn model
+
+# baseline medium model with 11 main effects
+lm_medium = lm(shares ~ n_tokens_title + n_tokens_content + num_hrefs + num_self_hrefs + num_imgs + 
+                 num_videos + average_token_length + num_keywords + data_channel_is_lifestyle + 
+                 data_channel_is_entertainment + data_channel_is_bus + data_channel_is_socmed + data_channel_is_tech +
+                 data_channel_is_world, data=news)
+
+
+```
+
+Next, we used the rest of the variables to include the pair-wise interactions between those 11 variables and the rest:
+
+```{r echo = FALSE, results = "hide"}
+lm_step = step(lm_medium, 
+               scope=~(. + self_reference_min_shares + self_reference_max_shares + self_reference_avg_sharess + weekday_is_monday +
+                         weekday_is_tuesday + weekday_is_wednesday + weekday_is_thursday + weekday_is_friday + weekday_is_saturday +
+                         weekday_is_sunday + is_weekend + global_rate_positive_words + global_rate_negative_words + avg_positive_polarity + 
+                         min_positive_polarity + max_positive_polarity + avg_negative_polarity + min_negative_polarity + max_negative_polarity +
+                         title_subjectivity + title_sentiment_polarity + abs_title_sentiment_polarity)^2) #changed ^3 to ^2 for now
+
+# the scope statement says:
+# "consider all pairwise interactions for everything in lm_medium (.),
+# along with the other variables explicitly named that weren't in medium"
+
+```
+
+With this selection, it gave us the following features to include:
+
+```{r}
+#select features to include in knn model
+getCall(lm_step)
+```
+
+After, we used these variables and pair-wise interactions to train the knn model. This gave us the following numbers:
+
+```{r echo = FALSE}
+#omit NA values in incomplete rows
+news = read.csv(params$online_news)
+news = na.omit(news)
+
+#create viral var
+viral = ifelse(news["shares"] >= 1400,1,0)
+
+#select features to include in knn model
+x = dplyr::select(news, n_tokens_title, n_tokens_content,num_self_hrefs,
+                    num_videos , average_token_length , num_keywords , data_channel_is_lifestyle , 
+                    data_channel_is_entertainment , data_channel_is_bus , data_channel_is_socmed , 
+                    data_channel_is_tech , data_channel_is_world , is_weekend , 
+                    weekday_is_saturday , weekday_is_friday , self_reference_min_shares , 
+                    n_tokens_content:num_self_hrefs , data_channel_is_bus:is_weekend , 
+                    num_self_hrefs:average_token_length , n_tokens_title:self_reference_min_shares ,
+                    data_channel_is_bus:self_reference_min_shares , num_keywords:data_channel_is_lifestyle ,
+                    num_videos:data_channel_is_bus , data_channel_is_world:is_weekend ,
+                    n_tokens_title:weekday_is_friday , num_self_hrefs:data_channel_is_bus ,
+                    num_self_hrefs:data_channel_is_entertainment,num_videos:average_token_length ,
+                    data_channel_is_world:weekday_is_friday,num_videos:num_keywords ,
+                    data_channel_is_entertainment:self_reference_min_shares ,
+                    n_tokens_content:data_channel_is_socmed , n_tokens_content:data_channel_is_lifestyle ,
+                    num_videos:self_reference_min_shares ,num_keywords:data_channel_is_socmed)
+y = viral
+n = length(y)
+
+#train/test split
+n_train = round(0.8*n)
+n_test = n - n_train
+
+TP = 0
+TN = 0
+FP = 0
+FN = 0
+
+TP_null = 0
+TN_null = 0
+FP_null = 0
+FN_null = 0
+
+N = 100
+for (i in 1:N){
+  
+  #split up training/testing data w/ random sampling
+  train_ind = sample.int(n, n_train)
+  x_train = x[train_ind,]
+  x_test = x[-train_ind,]
+  y_train = y[train_ind]
+  y_test = y[-train_ind]
+  
+  #scale training feature set column-wise by standard deviation
+  sd_scale = apply(x_train, 2, sd)
+  
+  #scale each x
+  x_train_sc = scale(x_train, scale=sd_scale)
+  x_test_sc = scale(x_test, scale=sd_scale)
+  
+  #make knn model
+  knn61 = class::knn(train=x_train_sc, test=x_test_sc, cl=y_train, k=99)
+  #knn25 = class::knn(train=x_train_sc, test=x_test_sc, cl=y_train, k=25)
+  
+  #output knnmodel into data set
+  knn_trainset = data.frame(x_train, type = y_train)
+  knn61_ts = data.frame(x_test, type = y_test, type_pred = knn61)
+  #knn25_ts = data.frame(x_test, type = y_test, type_pred = knn25)
+  
+  knn61_actual <- ifelse(knn61_ts["type"] == 1,1,0)
+  knn61_pred <- ifelse(as.numeric(as.character(knn61)) == 1,1,0)
+  
+  TP = TP + sum(knn61_actual == 1 & knn61_pred == 1)
+  TN = TN + sum(knn61_actual == 0 & knn61_pred == 0)
+  FP = FP + sum(knn61_actual == 0 & knn61_pred == 1)
+  FN = FN + sum(knn61_actual == 1 & knn61_pred == 0)
+  
+  #This is the null model
+  knn_null = as.list(rep(0, n_test))
+  
+  TP_null = TP_null + sum(knn61_actual == 1 & knn_null == 1)
+  TN_null = TN_null + sum(knn61_actual == 0 & knn_null == 0)
+  FP_null = FP_null + sum(knn61_actual == 0 & knn_null == 1)
+  FN_null = FN_null + sum(knn61_actual == 1 & knn_null == 0)
+}
+
+TP = floor(TP/N)
+TN = floor(TN/N)
+FP = floor(FP/N)
+FN = floor(FN/N)
+
+TP_null = floor(TP_null/N)
+TN_null = floor(TN_null/N)
+FP_null = floor(FP_null/N)
+FN_null = floor(FN_null/N)
+
+c_data <- matrix(c(TN,FP,FN,TP),ncol=2,byrow=TRUE)
+colnames(c_data) <- c("Predicted: Not Viral", "Predicted: Viral")
+rownames(c_data) <- c("Actual: Not Viral", "Actual: Viral")
+
+#knn61_table = table(knn61_actual)
+
+confusionMatrix <- as.table(c_data)
+accuracy = (TP+TN)/n_test * 100
+true_pos = TP/(TP+FN)
+false_pos = FP/(FP+TN)
+
+c_data_null <- matrix(c(TN_null,FP_null,FN_null,TP_null),ncol=2,byrow=TRUE)
+colnames(c_data_null) <- c("Predicted: Not Viral", "Predicted: Viral")
+rownames(c_data_null) <- c("Actual: Not Viral", "Actual: Viral")
+
+confusionMatrix_null <- as.table(c_data_null)
+accuracy_null = (TP_null+TN_null)/n_test * 100
+# true_pos_null = TP_null/knn61_table[2]
+# false_pos_null = FP_null/knn61_table[1]
+```
+
+#### Confusion Matrix
+
+```{r echo = FALSE}
+confusionMatrix
+```
+
+#### Accuracy:
+
+```{r echo = FALSE}
+accuracy
+```
+
+#### True Positive Rate:
+
+```{r echo = FALSE}
+true_pos
+```
+
+#### False Positive Rate:
+
+```{r echo = FALSE}
+false_pos
+```
+
+## Using Lasso Regression to choose most important feature variables
+
+Lasso Regression uses a shrinkage method to zero the non-important feature variables to include in the machine learning model. Combining this with AICc, we can find the optimal lambda (the tuning factor) in order to create the largest coeffecients for the most important features to include. Although, AIC gets larger as the lambda increases, so the best model has the largest lambda with the lowest AICc value.
+
+```{r echo = FALSE, results = 'hide'}
+#this makes the glm work bc 1 means viral and 0 is not viral
+news$shares = ifelse(news["shares"] >= 1400,1,0)
+news = select(news, -c(url))
+scx = model.matrix(shares ~ .-1, data=news) # do -1 to drop intercept!
+scy = news$shares # pull out `y' too just for convenience
+sclasso <- gamlr(scx, scy, family="binomial")
+plot(sclasso) # the path plot!
+```
+
+These were the following variables that were not zero'd out from lasso regression:
+
+```{r echo = FALSE}
+scbeta <- coef(sclasso)
+
+```
+
+Out of the 36 features, lasso regression outputted 19 important features to use.
+
+These features, in no particular order, are listed below:
+
+1. n_tokens_title
+2. n_tokens_content
+3. num_self_hrefs
+4. average_token_length
+5. num_keywords
+6. data_channel_is_entertainment
+7. data_channel_is_bus
+8. data_channel_is_socmed
+9. data_channel_is_tech
+10. data_channel_is_world
+11. self_reference_min_shares
+12. weekday_is_monday
+13. weekday_is_tuesday
+14. weekday_is_friday
+15. weekday_is_saturday
+16. is_weekend
+17. global_rate_positive_words
+18. title_subjectivity
+19. title_sentiment_polarity
+
+Using only these features I created another model. 
+
+### 19 Important Features
+
+```{r echo = FALSE}
+
+#omit NA values in incomplete rows
+news = read.csv(params$online_news)
+news = na.omit(news)
+
+#create viral var
+viral = ifelse(news["shares"] >= 1400,1,0)
+
+# Here from the lasso regression, i will choose first all the variables with coeffecient not 0,
+# this means all the variables that are significant according to lasso regression
+# the next two x's will indicate only using the largest magnitude of coefficient
+x = dplyr::select(news, n_tokens_title, n_tokens_content, num_self_hrefs, average_token_length,
+                  num_keywords, data_channel_is_entertainment, data_channel_is_bus, data_channel_is_socmed,
+                  data_channel_is_tech, data_channel_is_world, self_reference_min_shares, weekday_is_monday,
+                  weekday_is_tuesday, weekday_is_friday, weekday_is_saturday, is_weekend, global_rate_positive_words,
+                  title_subjectivity, title_sentiment_polarity)
+
+# this x will use 10 features variables, largest magnitude, greatest to least
+
+# x = dplyr::select(news, weekday_is_saturday, global_rate_positive_words, data_channel_is_socmed, is_weekend, data_channel_is_entertainment,
+#                   data_channel_is_world, data_channel_is_tech, data_channel_is_bus, weekday_is_friday, average_token_length)
+
+# this x will use 5 feature variables, again largest magnitude, greatest to least
+
+# x = dplyr::select(news, weekday_is_saturday, global_rate_positive_words, data_channel_is_socmed, is_weekend, data_channel_is_entertainment)
+
+#this makes the glm work bc 1 means viral and 0 is not viral
+news$shares = ifelse(news["shares"] >= 1400,1,0)
+y = viral
+n = length(y)
+
+#train/test split
+n_train = round(0.8*n)
+n_test = n - n_train
+
+TP = 0
+TN = 0
+FP = 0
+FN = 0
+
+TP_null = 0
+TN_null = 0
+FP_null = 0
+FN_null = 0
+
+N = 100
+for (i in 1:N){
+  
+  #split up training/testing data w/ random sampling
+  train_ind = sample.int(n, n_train)
+  x_train = x[train_ind,]
+  x_test = x[-train_ind,]
+  y_train = y[train_ind]
+  y_test = y[-train_ind]
+  
+  #scale training feature set column-wise by standard deviation
+  sd_scale = apply(x_train, 2, sd)
+  
+  #scale each x
+  x_train_sc = scale(x_train, scale=sd_scale)
+  x_test_sc = scale(x_test, scale=sd_scale)
+  
+  #make knn model
+  knn61 = class::knn(train=x_train_sc, test=x_test_sc, cl=y_train, k=99)
+  #knn25 = class::knn(train=x_train_sc, test=x_test_sc, cl=y_train, k=25)
+  
+  #output knnmodel into data set
+  knn_trainset = data.frame(x_train, type = y_train)
+  knn61_ts = data.frame(x_test, type = y_test, type_pred = knn61)
+  #knn25_ts = data.frame(x_test, type = y_test, type_pred = knn25)
+  
+  knn61_actual <- ifelse(knn61_ts["type"] == 1,1,0)
+  knn61_pred <- ifelse(as.numeric(as.character(knn61)) == 1,1,0)
+  
+  TP = TP + sum(knn61_actual == 1 & knn61_pred == 1)
+  TN = TN + sum(knn61_actual == 0 & knn61_pred == 0)
+  FP = FP + sum(knn61_actual == 0 & knn61_pred == 1)
+  FN = FN + sum(knn61_actual == 1 & knn61_pred == 0)
+  
+  #This is the null model
+  knn_null = as.list(rep(0, n_test))
+  
+  TP_null = TP_null + sum(knn61_actual == 1 & knn_null == 1)
+  TN_null = TN_null + sum(knn61_actual == 0 & knn_null == 0)
+  FP_null = FP_null + sum(knn61_actual == 0 & knn_null == 1)
+  FN_null = FN_null + sum(knn61_actual == 1 & knn_null == 0)
+}
+
+TP = floor(TP/N)
+TN = floor(TN/N)
+FP = floor(FP/N)
+FN = floor(FN/N)
+
+TP_null = floor(TP_null/N)
+TN_null = floor(TN_null/N)
+FP_null = floor(FP_null/N)
+FN_null = floor(FN_null/N)
+
+c_data <- matrix(c(TN,FP,FN,TP),ncol=2,byrow=TRUE)
+colnames(c_data) <- c("Predicted: Not Viral", "Predicted: Viral")
+rownames(c_data) <- c("Actual: Not Viral", "Actual: Viral")
+
+#knn61_table = table(knn61_actual)
+
+confusionMatrix <- as.table(c_data)
+accuracy = (TP+TN)/n_test * 100
+true_pos = TP/(TP+FN)
+false_pos = FP/(FP+TN)
+
+c_data_null <- matrix(c(TN_null,FP_null,FN_null,TP_null),ncol=2,byrow=TRUE)
+colnames(c_data_null) <- c("Predicted: Not Viral", "Predicted: Viral")
+rownames(c_data_null) <- c("Actual: Not Viral", "Actual: Viral")
+
+confusionMatrix_null <- as.table(c_data_null)
+accuracy_null = (TP_null+TN_null)/n_test * 100
+# true_pos_null = TP_null/knn61_table[2]
+# false_pos_null = FP_null/knn61_table[1]
+```
+
+#### Confusion Matrix
+
+```{r echo = FALSE}
+confusionMatrix
+```
+
+#### Accuracy:
+
+```{r echo = FALSE}
+accuracy
+```
+
+#### True Positive Rate:
+
+```{r echo = FALSE}
+true_pos
+```
+
+#### False Positive Rate:
+
+```{r echo = FALSE}
+false_pos
+```
+
+
+### 10 Most Important Features
+
+Then, I chose 10 largest features in terms of magnitude:
+
+```{r eval = FALSE}
+x = dplyr::select(news, weekday_is_saturday, global_rate_positive_words, data_channel_is_socmed, is_weekend, data_channel_is_entertainment, data_channel_is_world, data_channel_is_tech, data_channel_is_bus, weekday_is_friday, average_token_length)
+```
+
+```{r echo = FALSE}
+
+#omit NA values in incomplete rows
+news = read.csv(params$online_news)
+news = na.omit(news)
+
+#create viral var
+viral = ifelse(news["shares"] >= 1400,1,0)
+
+# Here from the lasso regression, i will choose first all the variables with coeffecient not 0,
+# this means all the variables that are significant according to lasso regression
+# # the next two x's will indicate only using the largest magnitude of coefficient
+# x = dplyr::select(news, n_tokens_title, n_tokens_content, num_self_hrefs, average_token_length,
+#                   num_keywords, data_channel_is_entertainment, data_channel_is_bus, data_channel_is_socmed,
+#                   data_channel_is_tech, data_channel_is_world, self_reference_min_shares, weekday_is_monday,
+#                   weekday_is_tuesday, weekday_is_friday, weekday_is_saturday, is_weekend, global_rate_positive_words,
+#                   title_subjectivity, title_sentiment_polarity)
+
+# this x will use 10 features variables, largest magnitude, greatest to least
+
+x = dplyr::select(news, weekday_is_saturday, global_rate_positive_words, data_channel_is_socmed, is_weekend, data_channel_is_entertainment,
+                   data_channel_is_world, data_channel_is_tech, data_channel_is_bus, weekday_is_friday, average_token_length)
+
+# this x will use 5 feature variables, again largest magnitude, greatest to least
+
+# x = dplyr::select(news, weekday_is_saturday, global_rate_positive_words, data_channel_is_socmed, is_weekend, data_channel_is_entertainment)
+
+#this makes the glm work bc 1 means viral and 0 is not viral
+news$shares = ifelse(news["shares"] >= 1400,1,0)
+y = viral
+n = length(y)
+
+#train/test split
+n_train = round(0.8*n)
+n_test = n - n_train
+
+TP = 0
+TN = 0
+FP = 0
+FN = 0
+
+TP_null = 0
+TN_null = 0
+FP_null = 0
+FN_null = 0
+
+N = 100
+for (i in 1:N){
+  
+  #split up training/testing data w/ random sampling
+  train_ind = sample.int(n, n_train)
+  x_train = x[train_ind,]
+  x_test = x[-train_ind,]
+  y_train = y[train_ind]
+  y_test = y[-train_ind]
+  
+  #scale training feature set column-wise by standard deviation
+  sd_scale = apply(x_train, 2, sd)
+  
+  #scale each x
+  x_train_sc = scale(x_train, scale=sd_scale)
+  x_test_sc = scale(x_test, scale=sd_scale)
+  
+  #make knn model
+  knn61 = class::knn(train=x_train_sc, test=x_test_sc, cl=y_train, k=99)
+  #knn25 = class::knn(train=x_train_sc, test=x_test_sc, cl=y_train, k=25)
+  
+  #output knnmodel into data set
+  knn_trainset = data.frame(x_train, type = y_train)
+  knn61_ts = data.frame(x_test, type = y_test, type_pred = knn61)
+  #knn25_ts = data.frame(x_test, type = y_test, type_pred = knn25)
+  
+  knn61_actual <- ifelse(knn61_ts["type"] == 1,1,0)
+  knn61_pred <- ifelse(as.numeric(as.character(knn61)) == 1,1,0)
+  
+  TP = TP + sum(knn61_actual == 1 & knn61_pred == 1)
+  TN = TN + sum(knn61_actual == 0 & knn61_pred == 0)
+  FP = FP + sum(knn61_actual == 0 & knn61_pred == 1)
+  FN = FN + sum(knn61_actual == 1 & knn61_pred == 0)
+  
+  #This is the null model
+  knn_null = as.list(rep(0, n_test))
+  
+  TP_null = TP_null + sum(knn61_actual == 1 & knn_null == 1)
+  TN_null = TN_null + sum(knn61_actual == 0 & knn_null == 0)
+  FP_null = FP_null + sum(knn61_actual == 0 & knn_null == 1)
+  FN_null = FN_null + sum(knn61_actual == 1 & knn_null == 0)
+}
+
+TP = floor(TP/N)
+TN = floor(TN/N)
+FP = floor(FP/N)
+FN = floor(FN/N)
+
+TP_null = floor(TP_null/N)
+TN_null = floor(TN_null/N)
+FP_null = floor(FP_null/N)
+FN_null = floor(FN_null/N)
+
+c_data <- matrix(c(TN,FP,FN,TP),ncol=2,byrow=TRUE)
+colnames(c_data) <- c("Predicted: Not Viral", "Predicted: Viral")
+rownames(c_data) <- c("Actual: Not Viral", "Actual: Viral")
+
+#knn61_table = table(knn61_actual)
+
+confusionMatrix <- as.table(c_data)
+accuracy = (TP+TN)/n_test * 100
+true_pos = TP/(TP+FN)
+false_pos = FP/(FP+TN)
+
+c_data_null <- matrix(c(TN_null,FP_null,FN_null,TP_null),ncol=2,byrow=TRUE)
+colnames(c_data_null) <- c("Predicted: Not Viral", "Predicted: Viral")
+rownames(c_data_null) <- c("Actual: Not Viral", "Actual: Viral")
+
+confusionMatrix_null <- as.table(c_data_null)
+accuracy_null = (TP_null+TN_null)/n_test * 100
+# true_pos_null = TP_null/knn61_table[2]
+# false_pos_null = FP_null/knn61_table[1]
+```
+
+#### Confusion Matrix
+
+```{r echo = FALSE}
+confusionMatrix
+```
+
+#### Accuracy:
+
+```{r echo = FALSE}
+accuracy
+```
+
+#### True Positive Rate:
+
+```{r echo = FALSE}
+true_pos
+```
+
+#### False Positive Rate:
+
+```{r echo = FALSE}
+false_pos
+```
+
+### 5 Most Important Features
+
+Then, the largest 5 features:
+
+```{r echo = FALSE}
+
+#omit NA values in incomplete rows
+news = read.csv(params$online_news)
+news = na.omit(news)
+
+#create viral var
+viral = ifelse(news["shares"] >= 1400,1,0)
+
+# Here from the lasso regression, i will choose first all the variables with coeffecient not 0,
+# this means all the variables that are significant according to lasso regression
+# the next two x's will indicate only using the largest magnitude of coefficient
+# x = dplyr::select(news, n_tokens_title, n_tokens_content, num_self_hrefs, average_token_length,
+#                   num_keywords, data_channel_is_entertainment, data_channel_is_bus, data_channel_is_socmed,
+#                   data_channel_is_tech, data_channel_is_world, self_reference_min_shares, weekday_is_monday,
+#                   weekday_is_tuesday, weekday_is_friday, weekday_is_saturday, is_weekend, global_rate_positive_words,
+#                   title_subjectivity, title_sentiment_polarity)
+
+# this x will use 10 features variables, largest magnitude, greatest to least
+
+# x = dplyr::select(news, weekday_is_saturday, global_rate_positive_words, data_channel_is_socmed, is_weekend, data_channel_is_entertainment,
+#                   data_channel_is_world, data_channel_is_tech, data_channel_is_bus, weekday_is_friday, average_token_length)
+
+#this x will use 5 feature variables, again largest magnitude, greatest to least
+
+x = dplyr::select(news, weekday_is_saturday, global_rate_positive_words, data_channel_is_socmed, is_weekend, data_channel_is_entertainment)
+
+#this makes the glm work bc 1 means viral and 0 is not viral
+news$shares = ifelse(news["shares"] >= 1400,1,0)
+y = viral
+n = length(y)
+
+#train/test split
+n_train = round(0.8*n)
+n_test = n - n_train
+
+TP = 0
+TN = 0
+FP = 0
+FN = 0
+
+TP_null = 0
+TN_null = 0
+FP_null = 0
+FN_null = 0
+
+N = 100
+for (i in 1:N){
+  
+  #split up training/testing data w/ random sampling
+  train_ind = sample.int(n, n_train)
+  x_train = x[train_ind,]
+  x_test = x[-train_ind,]
+  y_train = y[train_ind]
+  y_test = y[-train_ind]
+  
+  #scale training feature set column-wise by standard deviation
+  sd_scale = apply(x_train, 2, sd)
+  
+  #scale each x
+  x_train_sc = scale(x_train, scale=sd_scale)
+  x_test_sc = scale(x_test, scale=sd_scale)
+  
+  #make knn model
+  knn61 = class::knn(train=x_train_sc, test=x_test_sc, cl=y_train, k=99)
+  #knn25 = class::knn(train=x_train_sc, test=x_test_sc, cl=y_train, k=25)
+  
+  #output knnmodel into data set
+  knn_trainset = data.frame(x_train, type = y_train)
+  knn61_ts = data.frame(x_test, type = y_test, type_pred = knn61)
+  #knn25_ts = data.frame(x_test, type = y_test, type_pred = knn25)
+  
+  knn61_actual <- ifelse(knn61_ts["type"] == 1,1,0)
+  knn61_pred <- ifelse(as.numeric(as.character(knn61)) == 1,1,0)
+  
+  TP = TP + sum(knn61_actual == 1 & knn61_pred == 1)
+  TN = TN + sum(knn61_actual == 0 & knn61_pred == 0)
+  FP = FP + sum(knn61_actual == 0 & knn61_pred == 1)
+  FN = FN + sum(knn61_actual == 1 & knn61_pred == 0)
+  
+  #This is the null model
+  knn_null = as.list(rep(0, n_test))
+  
+  TP_null = TP_null + sum(knn61_actual == 1 & knn_null == 1)
+  TN_null = TN_null + sum(knn61_actual == 0 & knn_null == 0)
+  FP_null = FP_null + sum(knn61_actual == 0 & knn_null == 1)
+  FN_null = FN_null + sum(knn61_actual == 1 & knn_null == 0)
+}
+
+TP = floor(TP/N)
+TN = floor(TN/N)
+FP = floor(FP/N)
+FN = floor(FN/N)
+
+TP_null = floor(TP_null/N)
+TN_null = floor(TN_null/N)
+FP_null = floor(FP_null/N)
+FN_null = floor(FN_null/N)
+
+c_data <- matrix(c(TN,FP,FN,TP),ncol=2,byrow=TRUE)
+colnames(c_data) <- c("Predicted: Not Viral", "Predicted: Viral")
+rownames(c_data) <- c("Actual: Not Viral", "Actual: Viral")
+
+#knn61_table = table(knn61_actual)
+
+confusionMatrix <- as.table(c_data)
+accuracy = (TP+TN)/n_test * 100
+true_pos = TP/(TP+FN)
+false_pos = FP/(FP+TN)
+
+c_data_null <- matrix(c(TN_null,FP_null,FN_null,TP_null),ncol=2,byrow=TRUE)
+colnames(c_data_null) <- c("Predicted: Not Viral", "Predicted: Viral")
+rownames(c_data_null) <- c("Actual: Not Viral", "Actual: Viral")
+
+confusionMatrix_null <- as.table(c_data_null)
+accuracy_null = (TP_null+TN_null)/n_test * 100
+# true_pos_null = TP_null/knn61_table[2]
+# false_pos_null = FP_null/knn61_table[1]
+```
+
+#### Confusion Matrix
+
+```{r echo = FALSE}
+confusionMatrix
+```
+
+#### Accuracy:
+
+```{r echo = FALSE}
+accuracy
+```
+
+#### True Positive Rate:
+
+```{r echo = FALSE}
+true_pos
+```
+
+#### False Positive Rate:
+
+```{r echo = FALSE}
+false_pos
+```
+
+Conclusion:
+============
+
+In conclusion, the second approach provided a better model to predict the virality of an article and a k value between 61 - 117 seemed to increase the accuracy of the model. In both approaches, the null model gave an accuracy around the lower 42% - 45% mark. The first approach had a lower accuracy on average against multiple second approaches.
+
+On average, the best machine learning model that we were able to get was using the full step-wise pairing or the 19 important variables. These models gave around a 58% - 62% accuracy, and surprisingly creating a simpler model with 10 and 5 important variables lowered the accuracy. 
+
+For Mashable, when writing an article, they should consider the top 19 important variables, some of which were weekday_is_saturday, global_rate_positive_words, and data_channel_is_socmed. From these variables, they can conclude that people tend to read positive posts about social media on the weekend. When writing viral articles, they can take these factors into account.
