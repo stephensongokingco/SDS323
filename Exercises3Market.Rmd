@@ -1,0 +1,182 @@
+---
+title: "Market Segmentation"
+author: "Stephenson Gokingco, Akash Thakkar, Caroline Hao, James Cornejo"
+date: "4/19/2020"
+output: pdf_document
+params:
+  smdata0: "social_marketing.csv"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE)
+library(ggplot2)
+library(locfit)
+library(LICORS) 
+library(foreach)
+library(mosaic)
+library(cluster)
+library(tidyverse)
+library(plyr)
+smdata0 = read.csv('social_marketing.csv', header=TRUE)
+```
+
+<header>
+
+<center>
+
+Exercises 3: Market Segmentation
+===================================================================
+
+</header>
+</center>
+
+The data in social_marketing.csv was collected in the course of a market-research study using followers of the Twitter account of a large consumer brand, NutrientH20. The goal here was for NutrientH20 to understand its social-media audience a little bit better, so that it could hone its messaging a little more sharply.
+
+After initally trying out a principal component analysis that was rendered uninterpretable, we determined that a market segment is best defined as a cluster. We used k-means clustering (specifically k-means plus plus) and were able to to come up with some interesting, well-supported insights about the audience that will give NutrientH20 some insight as to how they might position their brand to maximally appeal to each market segment.
+
+```{r, include=FALSE}
+# Creating New Dataframe with a ID variable, and renamed rows
+smdata <- tibble::rowid_to_column(smdata0, "numid")
+smdata$wordid="id"
+smdata$twitid=paste(smdata$wordid,"_",smdata$numid)
+smdata = smdata %>%
+  column_to_rownames(var="twitid")
+smdata[[2]] <- NULL 
+smdata[[38]] <- NULL 
+```
+
+Let's run the PCA for this dataset.
+
+```{r}
+PCAtwit = prcomp(smdata, scale=TRUE)
+```
+
+We get the following variance plot:
+
+```{r echo = FALSE}
+## variance plot
+plot(PCAtwit, main="Variance Plot of the PCA")
+```
+
+Then, we get get the cumulative variances of each of the components.
+
+```{r echo = FALSE}
+#First component accounts for over 12% of variation in data
+summary(PCAtwit)
+```
+
+The first component accounts for over 12% of variation in the data, which is still significant considering that there are over 37 components to account for. We decided to take a closer look at the first 8 components because together they account for over 50% of the variation.
+
+```{r echo = FALSE}
+#View the first several PCAs
+round(PCAtwit$rotation[,1:8],2) 
+```
+
+We have now reached a point where our PCA no longer becomes interpretable. Take a look at PC4, for example. The coefficients with largest magnitude are health_nutrition, outdoors, and personal_fitness. They all have negative signs associated with them. Does it make sense that there's a significant population of the NutrientH20 followers that do not tweet about the aforementioned topics? Maybe we'll have better luck running a k-means clustering analysis.
+
+```{r, include=FALSE}
+#First we will standardize the data, note we get rid of numid
+z1=smdata[,(2:37)]
+smz=scale(z1, center=TRUE, scale=TRUE)
+# Extract the centers and scales from the rescaled data (which are named attributes)
+mu = attr(smz,"scaled:center")
+sigma = attr(smz,"scaled:scale")
+# Extract the centers and scales from the rescaled data (which are named attributes)
+mu = attr(smz,"scaled:center")
+sigma = attr(smz,"scaled:scale")
+```
+
+We will use the gap statistic method and the associated elbow plot to determine our K. 
+
+```{r eval=FALSE}
+# Using the gap statistic, we will identify how many K clusters to make
+twit_gap = clusGap(na.omit(smz), FUN=kmeans, nstart=2, K.max=20, B=20)
+plot(twit_gap, main="Gap Statistic Elbow Plot")
+```
+
+K = 11 based on this analysis, which means we will have 11 clusters. Let's run k-means (specifically k-means++) and then summarize the characteristics of each cluster. These will be our market segments. For the sake of space, we did not include the elbow plot in the output file because 10+ pages of "Warning: did not converge in 10 iterations" would be spammed onto the report.
+
+```{r, include=FALSE}
+kmeanspp <- function(data, k = 2, 
+                     start = "random", iter.max = 100, 
+                     nstart = 10, ...) {
+  
+  kk <- k
+  
+  if (length(dim(data)) == 0) {
+    data <- matrix(data, ncol = 1)
+  } else {
+    data <- cbind(data)
+  }
+  
+  num.samples <- nrow(data)
+  ndim <- ncol(data)
+  
+  data.avg <- colMeans(data)
+  data.cov <- cov(data)
+  
+  out <- list()
+  out$tot.withinss <- Inf
+  for (restart in seq_len(nstart)) {  
+    center_ids <- rep(0, length = kk)
+    if (start == "random"){
+      center_ids[1:2] = sample.int(num.samples, 1)
+    } else if (start == "normal") { 
+      center_ids[1:2] = which.min(dmvnorm(data, mean = data.avg, 
+                                          sigma = data.cov))
+    } else {
+      center_ids[1:2] = start
+    }
+    for (ii in 2:kk) { # the plus-plus step in kmeans
+      if (ndim == 1){
+        dists <- apply(cbind(data[center_ids, ]), 1, 
+                       function(center) {rowSums((data - center)^2)})
+      } else {
+        dists <- apply(data[center_ids, ], 1, 
+                       function(center) {rowSums((data - center)^2)})
+      }
+      probs <- apply(dists, 1, min)
+      probs[center_ids] <- 0
+      center_ids[ii] <- sample.int(num.samples, 1, prob = probs)
+    }
+    
+    tmp.out <- kmeans(data, centers = data[center_ids, ], iter.max = iter.max, ...)
+    tmp.out$inicial.centers <- data[center_ids, ]
+    if (tmp.out$tot.withinss < out$tot.withinss){
+      out <- tmp.out
+    }
+  } 
+  invisible(out)
+}
+clustall = kmeanspp(smz, k=11, nstart=25)
+# Which ID's are in which clusters?
+cen1 = which(clustall$cluster == 1)
+cen2 = which(clustall$cluster == 2)
+cen3 = which(clustall$cluster == 3)
+cen4 = which(clustall$cluster == 4)
+cen5 = which(clustall$cluster == 5)
+cen6 = which(clustall$cluster == 6)
+cen7 = which(clustall$cluster == 7)
+cen8 = which(clustall$cluster == 8)
+cen9 = which(clustall$cluster == 9)
+cen10 = which(clustall$cluster == 10)
+cen11 = which(clustall$cluster == 11)
+# Dataframe of Cluster Summaries for each Feature
+test_center <- clustall$centers
+clustall <- c(1:11)
+kpp_all <- data.frame(clustall, test_center)
+
+kpp_all$count <- c(length(cen1),length(cen2),length(cen3),length(cen4),
+                   length(cen5),length(cen6),length(cen7),length(cen8),
+                   length(cen9),length(cen10),length(cen11))
+
+kpp_all$pct <- kpp_all$count*100/sum(kpp_all$count)
+```
+
+```{r, echo=FALSE}
+print(kpp_all, right=FALSE)
+```
+
+Let's discuss what we have here. Our findings show that we have the following market segments: 1) "Lurkers" (cluster 9): 41.7%, fall slightly below average in the number of tweets in all categories make up 40%+ of the Twitter users, they are the silent and quiet majority; 2) "Influencers" (cluster 8): 12.2%, above average chatter (by 1.5 stdevs), shopping (by 1.5 stdevs), and photo-sharing (by 1.2 stdevs), they most likely partner up with brands and get paid to promote through social media outlets; 3) "Gym Rats" (cluster 7): 9.5%, significantly above average health/nutrition (2.2 stdevs) and personal fitness (2.2 stdevs) related content, and above average outdoors (1.8 stdevs) related content, these people like to frequent the gym; 4) "Media/Artists" (cluster 6): 5.2%, significantly above average tv/film (2.7 stdevs) and art (2.6 stdevs) related content, these are what you would call "creatives."; 5) "College Students" (cluster 10): 4.4%, significantly above average online-gaming (3.6 stdevs), college/uni (3.3 stdevs), and sports_playing (2.2 stdevs) related content, these are the hardcore gamers that likely spend more time playing Smash at the local video game store tournament than writing up a detailed statistical report for their stats class; 6) "Spam" (cluster 11): 0.6%, significantly above average spam (12.4 stdevs) and adult (3.8 stdevs) related content, as mentioned in the problem description, these are the spammers/trolls.
+
+One of the major tenets of marketing is to define a target and serve their needs specifically without regard to anyone outside of that target demographic. Our research shows that NutrientH20 could tailor its messaging to fit the needs of the influencers. This could include posting aesthetic photos or making "challenge" posts where they call upon their general follower base to post and/or hashtag their products in creative ways. Then, NutrientH20 can reach out to the users who did a fine job and offer them an influencer partnership. This would increase engagement and expand marketing in the long run.
