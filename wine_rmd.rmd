@@ -1,0 +1,285 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+params:
+  wine: wine.csv
+---
+<header>
+
+<center>
+
+Clustering and PCA of Wine
+=================================
+
+</center>
+
+</header>
+
+With this dataset, we explored both PCA and a clustering alogrithm
+on the 11 chemical properties in the "wine.csv" dataset. These 11 different
+chemical properties include:
+
+1) fixed.acidity
+2) volatile.acidity
+3) citric.acid
+4) residual.sugar
+5) chlorides
+6) free.sulfur.dioxide
+7) total.sulfur.dioxide
+8) density
+9) pH
+10) sulphates
+11) alcohol
+
+<center>
+
+## Objectives
+
+</center>
+
+Using these properties, we aim to create clusters which distinguishes red and white
+wine, and if possible, sort the higher and lower quality wines into different
+clusters. 
+
+## Clustering Algorithm (K-means)
+
+Our choice was to use k-means clustering instead of hierarchial clustering 
+because it allowed for better interpretability and made more sense to cluster red and white wines together.
+
+We first ran clusGap in the following code snippet below:
+```{r, eval=FALSE}
+library(cluster)
+wine_gap = clusGap(na.omit(X) ,FUN=kmeans, nstart=2, K.max=10,B=25)
+plot(wine_gap)
+```
+
+This code gave us the following elbow plot which we used to choose the optimal amount of clusters for k-means.
+
+```{r wineplot, echo=FALSE, out.width = '50%', fig.align="center"}
+knitr::include_graphics("elbow_plot_wine.png")
+```
+
+From this plot, we were able to see the dip around 5, which we confirmed by looking at the output of wine_gap. This would be the amount of k-means clusters we would use for the wine.csv data.
+
+```{r, eval=FALSE}
+> wine_gap
+Clustering Gap statistic ["clusGap"] from call:
+clusGap(x = na.omit(X), FUNcluster = kmeans, K.max = 10, B = 25,     nstart = 2)
+B=25 simulated reference sets, k = 1..10; spaceH0="scaledPCA"
+ --> Number of clusters (method 'firstSEmax', SE.factor=1): 5
+          logW   E.logW      gap      SE.sim
+ [1,] 11.63833 12.67760 1.039271 0.004926141
+ [2,] 11.16051 12.25156 1.091050 0.003856928
+ [3,] 10.82628 12.08691 1.260627 0.005145008
+ [4,] 10.65465 11.98593 1.331285 0.003704118
+ [5,] 10.53122 11.88465 1.353434 0.004376664
+ [6,] 10.45671 11.78644 1.329725 0.003719523
+ [7,] 10.39759 11.71446 1.316875 0.004480327
+ [8,] 10.33239 11.65299 1.320597 0.003128621
+ [9,] 10.27823 11.60931 1.331075 0.004167755
+[10,] 10.23165 11.57129 1.339641 0.004851971
+```
+
+With 5 clusters, we ran the k-means algorithm and obtained the following table.
+```{r, echo=FALSE, results='hide', message=FALSE, include=FALSE}
+library(ggplot2)
+library(LICORS)  # for kmeans++
+library(foreach)
+library(mosaic)
+library(tidyverse)
+
+wine = read.csv(params$wine)
+# Center and scale the data
+X = wine[,(1:11)]
+Y = scale(X, center=TRUE, scale=TRUE)
+
+# Extract the centers and scales from the rescaled data (which are named attributes)
+mu = attr(Y,"scaled:center")
+sigma = attr(Y,"scaled:scale")
+
+#library(cluster)
+#wine_gap = clusGap(na.omit(X) ,FUN=kmeans, nstart=2, K.max=10,B=25)
+#plot(wine_gap)
+
+# Run k-means with 6 clusters and 25 starts
+clust1 = kmeans(Y, 5, nstart=25)
+
+## Center 1
+cen1 = which(clust1$cluster == 1)
+clust_wine = wine[cen1, 13]
+
+sum(wine[cen1, 13] == "red")
+sum(wine[cen1, 13] == "white")
+
+quality = wine[cen1, 12]
+
+red1 = wine[cen1, 13] == "red"
+white1 = wine[cen1, 13] == "white"
+
+r_qual1 = quality[red1]
+w_qual1 = quality[white1]
+
+r_qual_mean1 = mean(r_qual1)
+w_qual_mean1 = mean(w_qual1)
+
+## Center 2
+
+cen2 = which(clust1$cluster == 2)
+clust_wine = wine[cen2, 13]
+
+sum(wine[cen2, 13] == "red")
+sum(wine[cen2, 13] == "white")
+
+quality2 = wine[cen2, 12]
+
+red2 = wine[cen2, 13] == "red"
+white2 = wine[cen2, 13] == "white"
+
+r_qual2 = quality2[red2]
+w_qual2 = quality2[white2]
+
+r_qual_mean2 = mean(r_qual2)
+w_qual_mean2 = mean(w_qual2)
+
+## Center 3
+
+cen3 = which(clust1$cluster == 3)
+clust_wine = wine[cen3, 13]
+
+sum(wine[cen3, 13] == "red")
+sum(wine[cen3, 13] == "white")
+
+quality3 = wine[cen3, 12]
+
+red3 = wine[cen3, 13] == "red"
+white3 = wine[cen3, 13] == "white"
+
+r_qual3 = quality3[red3]
+w_qual3 = quality3[white3]
+
+r_qual_mean3 = mean(r_qual3)
+w_qual_mean3 = mean(w_qual3)
+
+## Center 4
+
+cen4= which(clust1$cluster == 4)
+clust_wine4 = wine[cen4, 13]
+
+sum(wine[cen4, 13] == "red")
+sum(wine[cen4, 13] == "white")
+
+quality4 = wine[cen4, 12]
+
+red4 = wine[cen4, 13] == "red"
+white4 = wine[cen4, 13] == "white"
+
+r_qual4 = quality4[red4]
+w_qual4 = quality4[white4]
+
+r_qual_mean4 = mean(r_qual4)
+w_qual_mean4 = mean(w_qual4)
+
+## Center 5
+
+cen5 = which(clust1$cluster == 5)
+clust_wine5 = wine[cen5, 13]
+
+sum(wine[cen5, 13] == "red")
+sum(wine[cen5, 13] == "white")
+
+quality5 = wine[cen5, 12]
+
+red5 = wine[cen5, 13] == "red"
+white5 = wine[cen5, 13] == "white"
+
+r_qual5 = quality5[red5]
+w_qual5 = quality5[white5]
+
+r_qual_mean5 = mean(r_qual5)
+w_qual_mean5 = mean(w_qual5)
+
+censum <- matrix(
+  c(
+    sum(red1), sum(red2), sum(red3), sum(red4), sum(red5),
+    sum(white1), sum(white2), sum(white3), sum(white4), sum(white5),
+    r_qual_mean1, r_qual_mean2, r_qual_mean3, r_qual_mean4, r_qual_mean5,
+    w_qual_mean1, w_qual_mean2, w_qual_mean3, w_qual_mean4, w_qual_mean5), 
+  ncol=5,byrow=TRUE)
+
+colnames(censum) <- c("Cen1","Cen2","Cen3", "Cen4", "Cen5")
+rownames(censum) <- c("RedCount","WhiteCount","Avg Red Qual", "Avg White Qual")
+
+
+censum <- as.table(censum)
+
+```
+
+```{r, echo=FALSE}
+censum
+```
+
+### Analysis of the Clustering Algorithm
+
+From this table, we can clearly see that the five different centers were able to differentiate red
+and white wine pretty accurately. Each of the centers was able to cluster the type of wine based only based on the chemical properties. In each of the centers, there is a clear majority of what type of wine is classified.
+
+This technique was able to differentiate red and white wine accurately, but the quality of wine across the clusters was not easily differentiable. The range of quality between the clusters was from around 5.3 to 6.5 for red wine and 4.7 to 6.3 for white wine. Since the original range is between 1-10, this clustering algorithm depicts that in each cluster, the quality of wine averages out to 5 or 6. This technique does not seem capable of sorting the higher from the lower quality of wines. 
+
+## PCA 
+
+With PCA, we first had to clean the data by subtracting quality and color and then we ran prcomp which gave us the following plot.
+<center>
+```{r, echo=FALSE}
+
+wine = read.csv(params$wine)
+wine_clean = na.omit(wine)
+
+wine_results = wine_clean %>%
+  #group_by(color) %>% 
+  select(-quality) %>%
+  select(-color)
+  #summarize_all(mean) %>%
+  #column_to_rownames(var="color")
+
+PCAwine = prcomp(wine_results, scale=TRUE)
+plot(PCAwine)
+```
+</center>
+We took the first five PCA's since these are the highest values and would impact the linear models the most out of the total 11. The values below depict how each of the variables would affect the linear model in distinguishing red vs white wine.
+```{r, echo=FALSE}
+round(PCAwine$rotation[,1:5],2) 
+```
+
+Next, we plotted PC1 vs. PC2 and there was a clear separation between red and white wine.
+<center>
+```{r, echo=FALSE}
+wine_merge = merge(wine, PCAwine$x[,1:5], by="row.names")
+
+ggplot(wine_merge) + 
+  geom_text(aes(x=PC1, y=PC2,label=color, color=color), size=2)
+
+wine_merge$color = as.numeric(wine_merge$color == "red", 1, 0)
+```
+</center>
+From this data, we fitted a linear model to predict color and quality from the first five PCA's.
+<center>
+```{r echo=FALSE}
+lm1 = lm(color ~ PC1 + PC2 + PC3 + PC4 + PC5, data=wine_merge)
+lm2 = lm(quality ~ PC1 + PC2 + PC3 + PC4 + PC5, data=wine_merge)
+
+plot(color ~ fitted(lm1), data=wine_merge)
+plot(quality ~ fitted(lm2), data=wine_merge)
+
+```
+</center>
+
+### Analysis of PCA
+
+With the first fitted plot, there is a clear distinction between 0 and 1, which denotes white and red wine respectively. Again, this proves that using the first 5 PCA's, we are able to separate red and white wines from eachother.
+
+On the other hand, fitting the same PCA's against the quality, we can see that the model has trouble separating the wine based on qualtiy. An example of this would be at a guess of 6, the actual quality has more of a density around 7 or 8, which is on the higher end of the quality of wines. Further, it is not as interpretable to distinguish the quality of wines easily as it is with the color.
+
+# Conclusion
+
+After exploring both PCA and k-means clustering, we decided that k-means clustering made more sense for us for this data. This method was easy to understand because it had the goal of clustering red and white wines together, which it was able to do easily. This interpretability was the reason we believe k-means clustering was the right choice. For both PCA and k-means, they were able distinguish red and white wine, although both had difficulty sorting the higher from the lower quality wines. In each of the algorithms, they quality of wine seemed to average out toward the middle instead of creating clear distinctions between "higher" and "lower" quality.
