@@ -1,0 +1,72 @@
+---
+title: "Green_Buildings"
+output: pdf_document
+params: 
+  greenbuildings: "greenbuildings.csv"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+2) Predictive Model for Green Buildings
+=================================
+## Approach
+
+We set out to build a predictive model for price of buildings given characteristics of the building and its surrounding area. Once attaining this model, we hope to determine the average change in rental income per square foot associated with green certification. In order to determine the best predictive model, we combined two approaches to model optimization: stepwise selection and lasso fits. 
+
+First we used stepwise selection to determine which variables, including interactions contributed the most to variation in the data. We began with a baseline model of five variables that we estimated would have the largest impact on property rent: Gas_Costs, Electricity_Costs, net utility cost, class_a, and green_rating. From the resulting model, we were able to determine one prediction for the impact of green rating on property price. 
+
+In order to confirm our results, we incorporated the important interactions discovered by the stepwise selected model to run a lasso fit to create a regularized model from all the available variables from the dataset. The resulting model incorporated only the variables that contributed substantially to the variance in the data. From this resulting model, we were able to hold other relevant variables constant to determine the isolated impact of green certification on property price. 
+
+## Results
+
+The initial stepwise selection on the baseline medium model yielded the following optimal model for predicting property price. 
+
+```{r echo = FALSE}
+library(gamlr)
+library(dplyr)
+greenbuildings <- read.csv(params$greenbuildings)
+gb = na.omit(greenbuildings)
+gb = select(gb, -c(CS_PropertyID))
+
+lm_medium = lm(Rent ~ Gas_Costs + Electricity_Costs + net + class_a + green_rating, data=gb)
+
+
+lm_step = step(lm_medium, 
+               scope=~(. - cluster_rent)^3)
+
+getCall(lm_step)
+
+coef = coef(lm_step)
+mean = mean(gb$Electricity_Costs)
+green_rent_benefit = mean*coef[10] + coef[6]
+green_rent_benefit
+```
+
+Based on this initial stepwise selected model, we combined the impact of the main effect of a green rating and the interaction effect between green rating and electricity cost to determine the anticipated effect of a green rating on property price. Green rating by itself had an effect of approximately a $5.58 increase in rent price. However, when incorporating the interaction effect of electricity cost and green rating, the overall rent in green buildings is on average $1.26 cheaper per square foot than in non-green buildings. 
+
+Incorporating the important interactions identified by the stepwise model selection, we created a new regularized model using lasso fit. From the coefficients of each variable identified, we were able to identify the effect of green rating on property price in this model.
+
+```{r echo = FALSE}
+
+gb_lasso = select(gb, -c(LEED, Energystar, cluster_rent))
+
+scx = model.matrix(Rent ~ . -1 + Gas_Costs:Electricity_Costs + Electricity_Costs:class_a + 
+                     Gas_Costs:class_a + Electricity_Costs:green_rating + Electricity_Costs:net + 
+                     Gas_Costs:Electricity_Costs:class_a, data=gb_lasso)
+scy = gb$Rent 
+
+sclasso <- gamlr(scx, scy, family="poisson")
+scbeta <- coef(sclasso)
+scbeta
+
+green_rent_benefit_lasso = mean*scbeta[23] + scbeta[11]
+green_rent_benefit_lasso
+```
+
+This model did not find green ratings to have a substantial main effect on property price on its own. However, from the interaction effect between green rating and electricity costs, property prices seem to be approximately $0.21 less on average in green buildings versus non-green buildings. 
+
+##Conclusion
+From our analysis, we determined that green rated buildings on average tend to have cheaper rent per square foot than non-green buildings, driven mainly by the resulting lower electricity costs of the property. The range for this decrease in rent prices may be between $0.21 and $1.26 in price per square foot. 
